@@ -65,6 +65,8 @@ interface FlareClusterLayerProperties extends __esri.GraphicsLayerProperties {
     yPropertyName?: string;
     zPropertyName?: string;
 
+    symbolPropertyName?: string;
+
     refreshOnStationary?: boolean;
 
     filters?: PointFilter[];
@@ -107,6 +109,8 @@ export class FlareClusterLayer extends GraphicsLayer {
     xPropertyName: string;
     yPropertyName: string;
     zPropertyName: string;
+
+    symbolPropertyName?: string;
 
     filters: PointFilter[];
 
@@ -282,6 +286,27 @@ export class FlareClusterLayer extends GraphicsLayer {
         if (drawData) {
             this.draw();
         }
+    }
+
+    addData(data: any[], drawData: boolean = true) {
+        if ( !this._data ) this._data = []
+        this._data = this._data.concat( data )
+        if (drawData) {
+            this.draw();
+        }
+    }
+
+    filterData( callback: any ) {
+        if ( !this._data ) return
+        this._data = this._data.reduce( function ( acc, obj ) {
+            try {
+                if ( callback( obj ) ) return acc.concat( obj )
+            }
+            catch ( e ) {
+                console.warn( e )
+            }
+            return acc
+        }, [] )
     }
 
     draw(activeView?: any) {
@@ -463,6 +488,8 @@ export class FlareClusterLayer extends GraphicsLayer {
     }
 
     private _createSingle(obj) {
+        var self = this
+
         let point = new Point({
             x: obj[this.xPropertyName], y: obj[this.yPropertyName], z: obj[this.zPropertyName]
         });
@@ -471,25 +498,49 @@ export class FlareClusterLayer extends GraphicsLayer {
             point = <Point>webMercatorUtils.geographicToWebMercator(point);
         }
 
-        let graphic = new Graphic({
-            geometry: point,
-            attributes: obj
-        });
+        let templ = this.singlePopupTemplate
+        function addGraphic( symbol: any = null ) {
+            let graphic = new Graphic({
+                geometry: point,
+                attributes: obj,
+                popupTemplate: templ,
+                symbol: symbol
+            });
 
-        graphic.popupTemplate = this.singlePopupTemplate;
-        if (this.singleRenderer) {
-            let symbol = this.singleRenderer.getSymbol(graphic, this._activeView);
-            graphic.symbol = symbol;
+            if ( !symbol ) 
+                graphic.symbol = self.singleRenderer.getSymbol( graphic, self._activeView )
+
+            self.add(graphic);
+        }
+
+        // let graphic = new Graphic({
+        //     geometry: point,
+        //     attributes: obj
+        // });
+
+        // graphic.popupTemplate = this.singlePopupTemplate;
+        if ( this.symbolPropertyName && obj[ this.symbolPropertyName ] ) {
+            [].concat( obj[ this.symbolPropertyName ] ).forEach( function ( s ) {
+                addGraphic( s )
+            } )
+            // graphic.symbol = obj[ this.symbolPropertyName ];
+        } else if (this.singleRenderer) {
+            // let symbol = this.singleRenderer.getSymbol(graphic, this._activeView) 
+            addGraphic()
+
+            // graphic.symbol = symbol;
         }
         else if (this.singleSymbol) {
-            graphic.symbol = this.singleSymbol;
+            // graphic.symbol = this.singleSymbol;
+            addGraphic( this.singleSymbol )
         }
         else {
             // no symbology for singles defined, use the default symbol from the cluster renderer
-            graphic.symbol = this.clusterRenderer.defaultSymbol;
+            // graphic.symbol = this.clusterRenderer.defaultSymbol;
+            addGraphic( this.clusterRenderer.defaultSymbol )
         }
 
-        this.add(graphic);
+        // this.add(graphic);
     }
 
 
